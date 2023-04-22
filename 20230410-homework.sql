@@ -1,23 +1,104 @@
 ﻿-- 找出和最貴的產品同類別的所有產品
 -- Find all products in the same category as the most expensive product.
+SELECT *
+FROM Products
+WHERE CategoryID = (SELECT CategoryID
+                    FROM Products
+                    WHERE UnitPrice = (SELECT MAX(UnitPrice)
+                                       FROM Products));
 
 -- 找出和最貴的產品同類別最便宜的產品
 -- Find the cheapest product in the same category as the most expensive product.
+SELECT *
+FROM Products
+WHERE CategoryID = (SELECT CategoryID
+                    FROM Products
+                    WHERE UnitPrice = (SELECT MAX(UnitPrice)
+                                       FROM Products))
+  AND UnitPrice = (SELECT MIN(UnitPrice)
+                   FROM Products
+                   WHERE CategoryID = (SELECT CategoryID
+                                       FROM Products
+                                       WHERE UnitPrice = (SELECT MAX(UnitPrice)
+                                                          FROM Products)));
 
 -- 計算出上面類別最貴和最便宜的兩個產品的價差
 -- Calculate the price difference between the most expensive and cheapest products in the same category as above.
+SELECT MAX(UnitPrice) - MIN(UnitPrice) AS PriceDifference
+FROM Products
+WHERE CategoryID = (SELECT CategoryID
+                    FROM Products
+                    WHERE UnitPrice = (SELECT MAX(UnitPrice)
+                                       FROM Products));
 
 -- 找出沒有訂過任何商品的客戶所在的城市的所有客戶
 -- Find all customers located in the city of customers who have not placed any orders.
+SELECT *
+FROM Customers
+WHERE City IN (SELECT City
+               FROM Customers
+               WHERE CustomerID NOT IN (SELECT CustomerID
+                                        FROM Orders));
 
 -- 找出第 5 貴跟第 8 便宜的產品的產品類別
 -- Find the category of the 5th most expensive and 8th cheapest products.
+SELECT CategoryID, CategoryName
+FROM Categories
+WHERE CategoryID IN (SELECT CategoryID
+                     FROM Products
+                     ORDER BY UnitPrice DESC
+                     OFFSET 4 ROWS FETCH NEXT 1 ROW ONLY
+                     UNION
+                     SELECT CategoryID
+                     FROM Products
+                     ORDER BY UnitPrice
+                     OFFSET 7 ROWS FETCH NEXT 1 ROW ONLY);
 
 -- 找出誰買過第 5 貴跟第 8 便宜的產品
 -- Find who bought the 5th most expensive and 8th cheapest products.
+WITH expensive_products AS (SELECT ProductID
+                            FROM Products
+                            ORDER BY UnitPrice DESC
+                            OFFSET 4 ROWS FETCH NEXT 1 ROW ONLY),
+     cheap_products AS (SELECT ProductID
+                        FROM Products
+                        ORDER BY UnitPrice
+                        OFFSET 7 ROWS FETCH NEXT 1 ROW ONLY),
+     buyer_data AS (SELECT CustomerID
+                       FROM Orders
+                       WHERE OrderID IN (SELECT OrderID
+                                         FROM [Order Details]
+                                         WHERE ProductID IN (SELECT ProductID
+                                                             FROM expensive_products
+                                                             UNION
+                                                             SELECT ProductID
+                                                             FROM cheap_products)))
+SELECT CustomerID, CompanyName
+FROM Customers
+WHERE CustomerID IN (SELECT CustomerID
+                     from buyer_data);
 
 -- 找出誰賣過第 5 貴跟第 8 便宜的產品
 -- Find who sold the 5th most expensive and 8th cheapest products.
+WITH expensive_products AS (SELECT ProductID
+                            FROM Products
+                            ORDER BY UnitPrice DESC
+                            OFFSET 4 ROWS FETCH NEXT 1 ROW ONLY),
+     cheap_products AS (SELECT ProductID
+                        FROM Products
+                        ORDER BY UnitPrice
+                        OFFSET 7 ROWS FETCH NEXT 1 ROW ONLY),
+     seller_data AS (SELECT SupplierID
+                     FROM Products
+                     WHERE ProductID IN (SELECT ProductID
+                                         FROM expensive_products
+                                         UNION
+                                         SELECT ProductID
+                                         FROM cheap_products))
+SELECT SupplierID, CompanyName
+FROM Suppliers
+WHERE SupplierID IN (SELECT SupplierID
+                     from seller_data);
 
 -- 找出 13 號星期五的訂單 (惡魔的訂單)
 -- Find orders placed on Friday the 13th.
