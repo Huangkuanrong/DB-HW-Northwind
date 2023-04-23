@@ -65,55 +65,101 @@ WITH expensive_products AS (SELECT ProductID
                         ORDER BY UnitPrice
                         OFFSET 7 ROWS FETCH NEXT 1 ROW ONLY),
      buyer_data AS (SELECT CustomerID
-                       FROM Orders
-                       WHERE OrderID IN (SELECT OrderID
-                                         FROM [Order Details]
-                                         WHERE ProductID IN (SELECT ProductID
-                                                             FROM expensive_products
-                                                             UNION
-                                                             SELECT ProductID
-                                                             FROM cheap_products)))
+                    FROM Orders
+                    WHERE OrderID IN (SELECT OrderID
+                                      FROM [Order Details]
+                                      WHERE ProductID IN (SELECT ProductID
+                                                          FROM expensive_products
+                                                          UNION
+                                                          SELECT ProductID
+                                                          FROM cheap_products)))
 SELECT CustomerID, CompanyName
 FROM Customers
 WHERE CustomerID IN (SELECT CustomerID
                      from buyer_data);
 
+-- SELECT CategoryID, CategoryName
+-- FROM Categories
+-- WHERE CategoryID IN (
+--   SELECT CategoryID
+--   FROM (
+--     SELECT ProductID, UnitPrice,
+--       ROW_NUMBER() OVER (ORDER BY UnitPrice DESC) AS expensive_rank,
+--       ROW_NUMBER() OVER (ORDER BY UnitPrice) AS cheap_rank
+--     FROM Products
+--   ) p
+--   WHERE p.expensive_rank = 5 OR p.cheap_rank = 8
+--   GROUP BY CategoryID
+--   HAVING COUNT(*) = 2
+-- );
+
 -- 找出誰賣過第 5 貴跟第 8 便宜的產品
 -- Find who sold the 5th most expensive and 8th cheapest products.
-WITH expensive_products AS (SELECT ProductID
-                            FROM Products
-                            ORDER BY UnitPrice DESC
-                            OFFSET 4 ROWS FETCH NEXT 1 ROW ONLY),
-     cheap_products AS (SELECT ProductID
-                        FROM Products
-                        ORDER BY UnitPrice
-                        OFFSET 7 ROWS FETCH NEXT 1 ROW ONLY),
-     seller_data AS (SELECT SupplierID
-                     FROM Products
-                     WHERE ProductID IN (SELECT ProductID
-                                         FROM expensive_products
-                                         UNION
-                                         SELECT ProductID
-                                         FROM cheap_products))
-SELECT SupplierID, CompanyName
-FROM Suppliers
-WHERE SupplierID IN (SELECT SupplierID
-                     from seller_data);
+WITH expensive_products AS (
+  SELECT ProductID
+  FROM Products
+  ORDER BY UnitPrice DESC
+  OFFSET 4 ROWS FETCH NEXT 1 ROW ONLY
+),
+cheap_products AS (
+  SELECT ProductID
+  FROM Products
+  ORDER BY UnitPrice
+  OFFSET 7 ROWS FETCH NEXT 1 ROW ONLY
+)
+SELECT Suppliers.SupplierID, Suppliers.CompanyName
+FROM Products
+JOIN Suppliers ON Products.SupplierID = Suppliers.SupplierID
+WHERE Products.ProductID IN (
+  SELECT ProductID
+  FROM expensive_products
+  UNION
+  SELECT ProductID
+  FROM cheap_products
+);
 
 -- 找出 13 號星期五的訂單 (惡魔的訂單)
 -- Find orders placed on Friday the 13th.
+SELECT *
+FROM Orders
+WHERE DAY(OrderDate) = 13
+  AND FORMAT(OrderDate, 'dddd') = 'Friday';
 
 -- 找出誰訂了惡魔的訂單
 -- Find who placed the orders on Friday the 13th.
+SELECT CustomerID, CompanyName
+FROM Customers
+WHERE CustomerID IN (SELECT CustomerID
+                     FROM Orders
+                     WHERE DAY(OrderDate) = 13
+                       AND FORMAT(OrderDate, 'dddd') = 'Friday');
 
 -- 找出惡魔的訂單裡有什麼產品
 -- Find what products are included in the orders placed on Friday the 13th.
+SELECT p.ProductID, p.ProductName
+FROM Products p
+JOIN [Order Details] od ON p.ProductID = od.ProductID
+JOIN Orders o ON od.OrderID = o.OrderID
+WHERE DAY(o.OrderDate) = 13 AND FORMAT(o.OrderDate, 'dddd') = 'Friday';
 
 -- 列出從來沒有打折 (Discount) 出售的產品
 -- List all products that have never been sold with a discount.
+SELECT *
+FROM Products
+WHERE ProductID IN (SELECT ProductID
+                    FROM [Order Details]
+                    WHERE Discount = 0);
 
 -- 列出購買非本國的產品的客戶
 -- List all customers who have purchased products that are not from their country.
+SELECT DISTINCT c.CustomerID, c.CompanyName
+FROM Customers c
+         JOIN Orders o ON c.CustomerID = o.CustomerID
+         JOIN [Order Details] od ON o.OrderID = od.OrderID
+         JOIN Products p ON od.ProductID = p.ProductID
+         JOIN Suppliers s ON p.SupplierID = s.SupplierID AND c.Country <> s.Country
+WHERE c.CustomerID = o.CustomerID
+ORDER BY c.CustomerID;
 
 -- 列出在同個城市中有公司員工可以服務的客戶
 -- List all customers who can be serviced by company employees in the same city.
