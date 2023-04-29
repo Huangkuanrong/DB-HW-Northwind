@@ -95,28 +95,22 @@ WHERE CustomerID IN (SELECT CustomerID
 
 -- 找出誰賣過第 5 貴跟第 8 便宜的產品
 -- Find who sold the 5th most expensive and 8th cheapest products.
-WITH expensive_products AS (
-  SELECT ProductID
-  FROM Products
-  ORDER BY UnitPrice DESC
-  OFFSET 4 ROWS FETCH NEXT 1 ROW ONLY
-),
-cheap_products AS (
-  SELECT ProductID
-  FROM Products
-  ORDER BY UnitPrice
-  OFFSET 7 ROWS FETCH NEXT 1 ROW ONLY
-)
+WITH expensive_products AS (SELECT ProductID
+                            FROM Products
+                            ORDER BY UnitPrice DESC
+                            OFFSET 4 ROWS FETCH NEXT 1 ROW ONLY),
+     cheap_products AS (SELECT ProductID
+                        FROM Products
+                        ORDER BY UnitPrice
+                        OFFSET 7 ROWS FETCH NEXT 1 ROW ONLY)
 SELECT Suppliers.SupplierID, Suppliers.CompanyName
 FROM Products
-JOIN Suppliers ON Products.SupplierID = Suppliers.SupplierID
-WHERE Products.ProductID IN (
-  SELECT ProductID
-  FROM expensive_products
-  UNION
-  SELECT ProductID
-  FROM cheap_products
-);
+         JOIN Suppliers ON Products.SupplierID = Suppliers.SupplierID
+WHERE Products.ProductID IN (SELECT ProductID
+                             FROM expensive_products
+                             UNION
+                             SELECT ProductID
+                             FROM cheap_products);
 
 -- 找出 13 號星期五的訂單 (惡魔的訂單)
 -- Find orders placed on Friday the 13th.
@@ -138,9 +132,10 @@ WHERE CustomerID IN (SELECT CustomerID
 -- Find what products are included in the orders placed on Friday the 13th.
 SELECT p.ProductID, p.ProductName
 FROM Products p
-JOIN [Order Details] od ON p.ProductID = od.ProductID
-JOIN Orders o ON od.OrderID = o.OrderID
-WHERE DAY(o.OrderDate) = 13 AND FORMAT(o.OrderDate, 'dddd') = 'Friday';
+         JOIN [Order Details] od ON p.ProductID = od.ProductID
+         JOIN Orders o ON od.OrderID = o.OrderID
+WHERE DAY(o.OrderDate) = 13
+  AND FORMAT(o.OrderDate, 'dddd') = 'Friday';
 
 -- 列出從來沒有打折 (Discount) 出售的產品
 -- List all products that have never been sold with a discount.
@@ -163,26 +158,118 @@ ORDER BY c.CustomerID;
 
 -- 列出在同個城市中有公司員工可以服務的客戶
 -- List all customers who can be serviced by company employees in the same city.
+SELECT c.CustomerID, c.CompanyName, c.City, e.City
+FROM Customers c
+         INNER JOIN Orders o ON c.CustomerID = o.CustomerID
+         INNER JOIN Employees e ON o.EmployeeID = e.EmployeeID
+WHERE c.City = e.City
 
 -- 列出那些產品沒有人買過
 -- List all products that have never been purchased.
+SELECT ProductID, ProductName
+FROM Products
+WHERE ProductID NOT IN (SELECT ProductID
+                        FROM [Order Details]
+                        WHERE OrderID NOT IN (SELECT OrderID
+                                              FROM Orders));
 
 ----------------------------------------------------------------------------------------
 
 -- 列出所有在每個月月底的訂單
 -- List all orders at the end of each month.
+SELECT *
+FROM Orders
+WHERE OrderDate IN (SELECT MAX(OrderDate)
+                    FROM Orders
+                    GROUP BY MONTH(OrderDate));
 
 -- 列出每個月月底售出的產品
 -- List products sold at the end of each month.
+SELECT ProductID, ProductName
+FROM Products
+WHERE ProductID IN (SELECT ProductID
+                    FROM [Order Details]
+                    WHERE OrderID IN (SELECT OrderID
+                                      FROM Orders
+                                      WHERE OrderDate IN (SELECT MAX(OrderDate)
+                                                          FROM Orders
+                                                          GROUP BY MONTH(OrderDate))))
 
 -- 找出有敗過最貴的三個產品中的任何一個的前三個大客戶
 -- Find the top three customers who have purchased any of the three most expensive products.
+WITH t1 AS
+         (SELECT c.*,
+                 od.*,
+                 od.UnitPrice * od.Quantity * (1 - od.Discount) AS Total
+          FROM Customers c
+                   INNER JOIN Orders o ON o.CustomerID = c.CustomerID
+                   INNER JOIN [Order Details] od ON od.OrderID = o.OrderID),
+     t2 AS
+         (SELECT TOP 3 ProductID
+          FROM [Order Details]
+          ORDER BY UnitPrice DESC)
+SELECT TOP 3 CustomerID
+FROM t1
+WHERE ProductID IN (SELECT ProductID
+                    FROM t2)
+GROUP BY CustomerID
+ORDER BY COUNT(*) DESC;
 
 -- 找出有敗過銷售金額前三高個產品的前三個大客戶
 -- Find the top three customers who have purchased the three products with the highest sales amounts.
+WITH t1 AS
+         (SELECT c.*,
+                 od.*,
+                 od.UnitPrice * od.Quantity * (1 - od.Discount) AS Total
+          FROM Customers c
+                   INNER JOIN Orders o ON o.CustomerID = c.CustomerID
+                   INNER JOIN [Order Details] od ON od.OrderID = o.OrderID)
+SELECT TOP 3 CustomerID
+FROM t1
+WHERE ProductID IN (SELECT TOP 3 ProductID
+                    FROM t1
+                    GROUP BY ProductID
+                    ORDER BY SUM(Total) DESC)
+GROUP BY CustomerID
+ORDER BY SUM(Total) DESC;
+
+WITH t1 AS
+         (SELECT c.*,
+                 od.*,
+                 od.UnitPrice * od.Quantity * (1 - od.Discount) AS Total
+          FROM Customers c
+                   INNER JOIN Orders o ON o.CustomerID = c.CustomerID
+                   INNER JOIN [Order Details] od ON od.OrderID = o.OrderID)
+SELECT TOP 3 CustomerID
+FROM t1
+WHERE CustomerID IN (SELECT DISTINCT CustomerID
+                     FROM t1
+                     WHERE ProductID IN (SELECT TOP 3 ProductID
+                                         FROM t1
+                                         GROUP BY ProductID
+                                         ORDER BY SUM(Total) DESC))
+GROUP BY CustomerID
+ORDER BY SUM(Total) DESC
 
 -- 找出有敗過銷售金額前三高個產品所屬類別的前三個大客戶
 -- Find the top three customers who have purchased products in the same category as the three products with the highest sales amounts.
+WITH t1 AS
+         (SELECT c.*,
+                 od.*,
+                 od.UnitPrice * od.Quantity * (1 - od.Discount) AS Total
+          FROM Customers c
+                   INNER JOIN Orders o ON o.CustomerID = c.CustomerID
+                   INNER JOIN [Order Details] od ON od.OrderID = o.OrderID)
+SELECT TOP 3 CustomerID
+FROM t1
+WHERE CustomerID IN (SELECT DISTINCT CustomerID
+                     FROM t1
+                     WHERE ProductID IN (SELECT TOP 3 ProductID
+                                         FROM t1
+                                         GROUP BY ProductID
+                                         ORDER BY SUM(Total) DESC))
+GROUP BY CustomerID
+ORDER BY SUM(Total) DESC
 
 -- 列出消費總金額高於所有客戶平均消費總金額的客戶的名字，以及客戶的消費總金額
 -- List the names of customers whose total spending is higher than the average spending of all customers, along with their total spending.
