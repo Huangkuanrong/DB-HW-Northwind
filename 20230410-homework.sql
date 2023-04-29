@@ -266,7 +266,7 @@ WHERE CustomerID IN (SELECT DISTINCT CustomerID
                      FROM t1
                      WHERE ProductID IN (SELECT TOP 3 ProductID
                                          FROM t1
-                                         GROUP BY ProductID
+                                         GROUP BY od.ProductID
                                          ORDER BY SUM(Total) DESC))
 GROUP BY CustomerID
 ORDER BY SUM(Total) DESC
